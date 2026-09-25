@@ -1,0 +1,37 @@
+{
+  "name": "commit-message-pickup",
+  "version": "1.0.0",
+  "description": "Turn your git diff into a clear commit message. Paste it in the browser or run pickup in your terminal.",
+  "type": "module",
+  "bin": {
+    "pickup": "bin/pickup.js"
+  },
+  "scripts": {
+    "dev": "node src/server.js --dev",
+    "demo": "node src/server.js --dev --demo",
+    "build": "vite build",
+    "start": "node src/server.js",
+    "preview": "vite build && node src/server.js --demo"
+  },
+  "keywords": [
+    "git",
+    "commit",
+    "commit-message",
+    "conventional-commits",
+    "claude",
+    "cli"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.12"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.1.1",
+    "vite": "^8.3.1"
+  }
+}
