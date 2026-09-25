@@ -30,13 +30,13 @@ Pickup closes that gap:
 
 ## Quick start
 
-You'll need [Node.js](https://nodejs.org) 20.12 or newer and a [Claude API key](https://console.anthropic.com/settings/keys).
+You'll need [Node.js](https://nodejs.org) 20.12 or newer and at least one AI key: an [OpenAI API key](https://platform.openai.com/api-keys) (pay-as-you-go, needs [billing](https://platform.openai.com/settings/organization/billing)), a [Gemini API key](https://aistudio.google.com/apikey) (has a free tier), or both. With both, Gemini takes over automatically when OpenAI runs out of credit.
 
 ```bash
-git clone https://github.com/your-username/commit-message-pickup.git
-cd commit-message-pickup
+git clone https://github.com/satyaidk/pickup.git
+cd pickup
 npm install
-cp .env.example .env        # then paste your key into ANTHROPIC_API_KEY
+cp .env.example .env        # then add OPENAI_API_KEY, GEMINI_API_KEY, or both
 npm run dev                 # open http://127.0.0.1:5173
 ```
 
@@ -89,18 +89,20 @@ Lockfiles (`package-lock.json`, `yarn.lock` and similar) are left out of what Pi
 ## How it works
 
 ```
- git diff ──▶  src/generate.js  ──▶  Claude API  ──▶  { summary, candidates[3], split_hint }
-                ▲            ▲
-   src/server.js            bin/pickup.js
-   (React app + /api)       (terminal)
+                                              ┌─▶ OpenAI  (first choice)
+ git diff ──▶ src/generate.js ──▶ router ────┤
+                ▲          ▲                  └─▶ Gemini  (backup, when OpenAI fails)
+   src/server.js          bin/pickup.js
+   (React app + /api)     (terminal)            ──▶ { summary, candidates[3], split_hint }
 ```
 
-- **`src/generate.js`** is the core. It sends the diff to Claude with a system prompt that sets the rules: imperative mood, subject under 50 characters, body wrapped at 72, never invent tickets or motivations the diff doesn't show. It uses **structured outputs** (a JSON schema), so the response always has the same shape and never needs fragile text parsing.
-- **`src/server.js`** is a small Node HTTP server with no framework. It exposes `POST /api/generate` and serves the React app: through Vite with hot reload in development, and from the `dist/` build in production. The API key stays on the server and never reaches the browser.
+- **`src/generate.js`** is the core. It builds the instructions that set the rules: imperative mood, subject under 50 characters, body wrapped at 72, never invent tickets or motivations the diff doesn't show. The same JSON schema goes to every provider (OpenAI **Structured Outputs**, Gemini's **response JSON schema**), so the response always has the same shape whichever AI wrote it, and never needs fragile text parsing.
+- **`src/providers/`** holds one small module per AI provider (`openai.js`, `gemini.js`) that turns each SDK's errors into one shared shape, plus **`router.js`**, which does the fallback. It tries OpenAI first. If OpenAI is out of credit, rate limited, unreachable or rejects its key, the same request goes to Gemini straight away, and OpenAI is skipped for a while (15 minutes after running out of credit, or exactly as long as a rate limit asks) so later requests don't waste a round trip. When a backup wrote the messages, the page and the CLI say so, and the server logs why it switched.
+- **`src/server.js`** is a small Node HTTP server with no framework. It exposes `POST /api/generate` and serves the React app: through Vite with hot reload in development, and from the `dist/` build in production. The API keys stay on the server and never reach the browser.
 - **`bin/pickup.js`** reads `git diff --staged`, calls the same core, and commits with `git commit -F -` so multi-line messages are passed exactly.
 - **`web/`** is the React app, built with Vite. Each section of the page is its own component, and the logic that doesn't need React (diff stats, length checks, building the `git commit` command) lives in plain functions in `web/src/lib/commit.js`.
 
-Errors are written for the person using the tool: a rejected key, a rate limit, an empty diff or an oversized diff each get a message that says what happened and what to do next.
+Errors are written for the person using the tool: a rejected key, an account out of credit, a rate limit, an empty diff or an oversized diff each get a message that says what happened and what to do next.
 
 ### Design
 
@@ -112,9 +114,12 @@ All settings go in `.env`:
 
 | Variable | Default | |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | none | Required |
-| `PICKUP_MODEL` | `claude-opus-5` | Claude model to use |
-| `PICKUP_EFFORT` | `medium` | `low` is faster and cheaper; `high` thinks harder on large diffs |
+| `OPENAI_API_KEY` | none | At least one of the two keys is required |
+| `GEMINI_API_KEY` | none | Backup provider; also works on its own |
+| `PICKUP_PROVIDERS` | `openai,gemini` | Order to try providers in |
+| `OPENAI_MODEL` | `gpt-5.4-mini` | Any chat model your OpenAI account can use |
+| `OPENAI_REASONING_EFFORT` | unset | For reasoning models (gpt-5 and o-series): `low` is faster and cheaper |
+| `GEMINI_MODEL` | `gemini-flash-latest` | Any Gemini model your key can use |
 | `PORT` | `5173` | Web server port |
 | `PICKUP_DEMO` | unset | Set to `1` for example output with no API calls |
 
@@ -124,7 +129,8 @@ All settings go in `.env`:
 
 ```
 bin/pickup.js       CLI
-src/generate.js     Prompt, schema and Claude API call (shared core)
+src/generate.js     Prompt and schema (shared core)
+src/providers/      openai.js, gemini.js and router.js (fallback between them)
 src/server.js       Web server and /api/generate
 src/env.js          Loads .env from the project folder
 web/                React app (Vite)

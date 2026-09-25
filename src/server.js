@@ -13,7 +13,7 @@ import { loadEnv } from "./env.js";
 loadEnv();
 if (process.argv.includes("--demo")) process.env.PICKUP_DEMO = "1";
 const DEV = process.argv.includes("--dev");
-const { generateCommitMessages, PickupError, MODEL, MAX_DIFF_CHARS } = await import("./generate.js");
+const { generateCommitMessages, PickupError, MAX_DIFF_CHARS, providerStatus } = await import("./generate.js");
 
 const DIST_DIR = fileURLToPath(new URL("../dist/", import.meta.url));
 const PORT = Number(process.env.PORT) || 5173;
@@ -89,7 +89,7 @@ const server = createServer((req, res) => {
   const path = req.url.split("?")[0];
   if (path === "/api/generate" && req.method === "POST") return handleGenerate(req, res);
   if (path === "/api/status" && req.method === "GET") {
-    return sendJson(res, 200, { model: MODEL, demo: process.env.PICKUP_DEMO === "1" });
+    return sendJson(res, 200, { demo: process.env.PICKUP_DEMO === "1", providers: providerStatus() });
   }
   if (path.startsWith("/api/")) return sendJson(res, 404, { error: "Not found" });
   if (vite) return vite.middlewares(req, res);
@@ -127,7 +127,13 @@ server.listen(PORT, HOST, () => {
   console.log(`Pickup is running at http://${where}:${PORT}${DEV ? " (development, hot reload on)" : ""}`);
   if (process.env.PICKUP_DEMO === "1") {
     console.log("Demo mode: responses are canned examples and no API calls are made.");
-  } else if (!process.env.ANTHROPIC_API_KEY) {
-    console.log("No ANTHROPIC_API_KEY found. Copy .env.example to .env and add your key.");
+  } else {
+    const providers = providerStatus();
+    if (providers.length === 0) {
+      console.log("No AI provider is set up. Copy .env.example to .env and add OPENAI_API_KEY, GEMINI_API_KEY, or both.");
+    } else {
+      const [first, ...backups] = providers.map((p) => `${p.name} (${p.model})`);
+      console.log(`AI: ${first}${backups.length ? `, falling back to ${backups.join(", then ")}` : ""}.`);
+    }
   }
 });

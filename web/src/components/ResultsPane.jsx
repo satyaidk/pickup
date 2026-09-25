@@ -39,7 +39,7 @@ export default function ResultsPane({ output }) {
 }
 
 function Results({ result }) {
-  const { summary, candidates, split_hint: splitHint } = result;
+  const { summary, candidates, split_hint: splitHint, fallback_note: fallbackNote } = result;
   const [selected, setSelected] = useState(0);
   const [copyStatus, setCopyStatus] = useState("");
 
@@ -76,6 +76,7 @@ function Results({ result }) {
         ))}
       </fieldset>
       {splitHint && <p className="split">Consider splitting this commit. {splitHint}</p>}
+      {fallbackNote && <p className="provider-note">{fallbackNote}</p>}
       <div className="actions">
         <button type="button" className="btn btn-primary" onClick={() => copy(fullMessage(pick), "Message copied")}>
           Copy message

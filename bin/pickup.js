@@ -90,7 +90,8 @@ function fullMessage({ subject, body }) {
   return body.trim() ? `${subject}\n\n${body.trim()}` : subject;
 }
 
-function printCandidates({ summary, candidates, split_hint }) {
+function printCandidates({ summary, candidates, split_hint, fallback_note }) {
+  if (fallback_note) console.log(yellow(`\n${fallback_note}`));
   console.log(`\n${dim(summary)}\n`);
   candidates.forEach((candidate, i) => {
     const length = candidate.subject.length;

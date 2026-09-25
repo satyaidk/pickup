@@ -1,9 +1,10 @@
-// Core of Pickup: turn a git diff into commit message candidates with Claude.
+// Core of Pickup: turn a git diff into commit message candidates.
 // Shared by the web server (src/server.js) and the CLI (bin/pickup.js).
+// The AI call goes through src/providers/router.js, which uses OpenAI first
+// and falls back to Gemini when OpenAI is out of credit, rate limited or down.
 
-import Anthropic from "@anthropic-ai/sdk";
+import { AllProvidersFailedError, NoProviderError, getRouter } from "./providers/router.js";
 
-export const MODEL = process.env.PICKUP_MODEL || "claude-opus-5";
 export const MAX_DIFF_CHARS = 400_000;
 
 const SYSTEM_PROMPT = `You write git commit messages from diffs.
@@ -28,7 +29,7 @@ const STYLE_RULES = {
     'Use a plain subject line with no type prefix, starting with a capitalized imperative verb, like "Add password reset form".',
 };
 
-// Structured output schema: the API guarantees the response matches it.
+// Response schema, sent to every provider so the output always has this shape.
 const OUTPUT_SCHEMA = {
   type: "object",
   properties: {
@@ -62,19 +63,14 @@ export class PickupError extends Error {
   }
 }
 
-let client;
-function getClient() {
-  client ??= new Anthropic();
-  return client;
-}
-
 /**
  * @param {object} input
  * @param {string} input.diff        Output of `git diff` (staged or not).
  * @param {string} [input.hint]      Optional note from the developer about intent.
  * @param {"conventional"|"simple"} [input.style]
  * @param {boolean} [input.includeBody]
- * @returns {Promise<{summary: string, candidates: {subject: string, body: string, note: string}[], split_hint: string}>}
+ * @returns {Promise<{summary: string, candidates: {subject: string, body: string, note: string}[], split_hint: string,
+ *   served_by: {provider: string, model: string}, fallback_note: string | null}>}
  */
 export async function generateCommitMessages({ diff, hint = "", style = "conventional", includeBody = true }) {
   if (typeof diff !== "string" || !diff.trim()) {
@@ -100,63 +96,34 @@ export async function generateCommitMessages({ diff, hint = "", style = "convent
     .filter(Boolean)
     .join("\n\n");
 
-  let response;
   try {
-    response = await getClient().beta.messages.create({
-      model: MODEL,
-      max_tokens: 16000,
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
-      thinking: { type: "adaptive" },
-      output_config: {
-        effort: process.env.PICKUP_EFFORT || "medium",
-        format: { type: "json_schema", schema: OUTPUT_SCHEMA },
-      },
+    const { data, provider, model, fallbackNote } = await getRouter().generate({
       system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: userContent }],
+      user: userContent,
+      schema: OUTPUT_SCHEMA,
     });
+    return { ...data, served_by: { provider, model }, fallback_note: fallbackNote };
   } catch (error) {
     throw toPickupError(error);
-  }
-
-  if (response.stop_reason === "refusal") {
-    throw new PickupError("Claude declined to describe this diff. Try removing any secrets or unrelated files from it.", 422);
-  }
-  if (response.stop_reason === "max_tokens") {
-    throw new PickupError("The response was cut off before it finished. Try a smaller diff.", 502);
-  }
-
-  const text = response.content.find((block) => block.type === "text")?.text;
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw new PickupError("Claude returned a response Pickup couldn't read. Try again.", 502);
   }
 }
 
 function toPickupError(error) {
-  if (error instanceof Anthropic.AuthenticationError) {
-    return new PickupError("The Claude API key was rejected. Check ANTHROPIC_API_KEY in your .env file.", 401);
+  if (error instanceof NoProviderError) {
+    return new PickupError("No AI provider is set up. Add OPENAI_API_KEY or GEMINI_API_KEY to a .env file in the project folder.", 401);
   }
-  if (error instanceof Anthropic.PermissionDeniedError) {
-    return new PickupError("This API key doesn't have access to the model. Check your Anthropic Console settings.", 403);
-  }
-  if (error instanceof Anthropic.RateLimitError) {
-    return new PickupError("Too many requests to Claude right now. Wait a few seconds and try again.", 429);
-  }
-  if (error instanceof Anthropic.BadRequestError) {
-    return new PickupError(`Claude rejected the request: ${error.message}`, 400);
-  }
-  if (error instanceof Anthropic.APIConnectionError) {
-    return new PickupError("Couldn't reach the Claude API. Check your internet connection.", 503);
-  }
-  if (error instanceof Anthropic.APIError) {
-    return new PickupError(`The Claude API returned an error (${error.status}). Try again in a moment.`, 502);
-  }
-  if (error instanceof Error && /credentials|api key|apiKey/i.test(error.message)) {
-    return new PickupError("No Claude API key found. Add ANTHROPIC_API_KEY to a .env file in the project folder.", 401);
+  if (error instanceof AllProvidersFailedError) {
+    const { failures } = error;
+    if (failures.length === 1) return new PickupError(failures[0].message, failures[0].status);
+    const details = failures.map((f) => `${f.provider}: ${f.message}`).join(" ");
+    return new PickupError(`Every AI provider failed. ${details}`, failures.at(-1).status);
   }
   return error;
+}
+
+/** Which providers are set up, in the order they're tried. */
+export function providerStatus() {
+  return getRouter().status();
 }
 
 // Canned output so the UI and CLI can be tried without an API key (PICKUP_DEMO=1).
@@ -190,6 +157,8 @@ function demoResponse(style) {
             },
           ],
           split_hint: "",
+          served_by: { provider: "Demo", model: "example output" },
+          fallback_note: null,
         }),
       900,
     ),
