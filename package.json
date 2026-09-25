@@ -18,7 +18,8 @@
     "commit",
     "commit-message",
     "conventional-commits",
-    "claude",
+    "openai",
+    "gemini",
     "cli"
   ],
   "license": "MIT",
@@ -26,7 +27,8 @@
     "node": ">=20.12"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.128.0",
+    "@google/genai": "^2.24.0",
+    "openai": "^7.23.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },

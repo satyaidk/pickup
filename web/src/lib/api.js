@@ -1,4 +1,4 @@
-// Calls to the Pickup server. The Claude API key lives there, never in the browser.
+// Calls to the Pickup server. The OpenAI API key lives there, never in the browser.
 
 export async function generateMessages({ diff, hint, style, includeBody }) {
   let response;
