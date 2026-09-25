@@ -14,7 +14,7 @@ export default function Footer() {
   return (
     <footer className="foot">
       <p>
-        Pickup is open source. Built by <a href={AUTHOR_URL}>{AUTHOR_NAME}</a> with the Claude API.
+        Pickup is open source. Built by <a href={AUTHOR_URL}>{AUTHOR_NAME}</a> with Passion.
       </p>
       <p className="model">{modelLine}</p>
     </footer>

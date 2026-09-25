@@ -33,8 +33,8 @@ Pickup closes that gap:
 You'll need [Node.js](https://nodejs.org) 20.12 or newer and a [Claude API key](https://console.anthropic.com/settings/keys).
 
 ```bash
-git clone https://github.com/your-username/commit-message-pickup.git
-cd commit-message-pickup
+git clone https://github.com/satyaidk/pickup.git
+cd pickup
 npm install
 cp .env.example .env        # then paste your key into ANTHROPIC_API_KEY
 npm run dev                 # open http://127.0.0.1:5173
