@@ -2,6 +2,12 @@
 
 **Turn your git diff into a clear commit message.** Paste your changes into the web page, or run `pickup` in your terminal, and choose from three well-written messages in the format real teams use.
 
+
+
+https://github.com/user-attachments/assets/879bdb0c-56c1-49d6-ab55-11ac9f8d95ed
+
+
+
 ![Pickup: a diff on the left, three suggested commit messages on the right](docs/screenshot.png)
 
 ## Why I built this
